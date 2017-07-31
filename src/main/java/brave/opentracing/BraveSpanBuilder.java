@@ -38,6 +38,7 @@ import java.util.Map;
  */
 public final class BraveSpanBuilder implements Tracer.SpanBuilder {
 
+  private final Tracer tracer;
   private final brave.Tracer braveTracer;
   private final Map<String, String> tags = new LinkedHashMap<>();
 
@@ -46,7 +47,8 @@ public final class BraveSpanBuilder implements Tracer.SpanBuilder {
   private TraceContext parent;
   private boolean ignoringActiveSpan;
 
-  BraveSpanBuilder(brave.Tracer braveTracer, String operationName) {
+  BraveSpanBuilder(Tracer tracer, brave.Tracer braveTracer, String operationName) {
+    this.tracer = tracer;
     this.braveTracer = braveTracer;
     this.operationName = operationName;
   }
@@ -172,7 +174,7 @@ public final class BraveSpanBuilder implements Tracer.SpanBuilder {
   @Override
   public ActiveSpan startActive() {
     BraveSpan braveSpan = startManual();
-    return BraveTracer.makeActive(braveTracer, braveSpan);
+    return tracer.makeActive(braveSpan);
   }
 
   @Override

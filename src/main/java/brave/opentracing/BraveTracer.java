@@ -28,6 +28,7 @@ import brave.propagation.TraceContext.Extractor;
 import brave.propagation.TraceContext.Injector;
 import brave.propagation.TraceContextOrSamplingFlags;
 import io.opentracing.ActiveSpan;
+import io.opentracing.ActiveSpanSource;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
@@ -71,6 +72,7 @@ public final class BraveTracer implements Tracer {
   public static final class Builder {
     Tracing brave4;
     Map<Format<TextMap>, Propagation<String>> formatToPropagation = new LinkedHashMap<>();
+    ActiveSpanSource activeSpanSource;
 
     Builder(Tracing brave4) {
       if (brave4 == null) throw new NullPointerException("brave tracing component == null");
@@ -103,6 +105,11 @@ public final class BraveTracer implements Tracer {
       return this;
     }
 
+    public Builder activeSpanSource(ActiveSpanSource activeSpanSource) {
+      this.activeSpanSource = activeSpanSource;
+      return this;
+    }
+
     public BraveTracer build() {
       return new BraveTracer(this);
     }
@@ -111,6 +118,7 @@ public final class BraveTracer implements Tracer {
   final brave.Tracer brave4;
   final Map<Format<TextMap>, Injector<TextMap>> formatToInjector = new LinkedHashMap<>();
   final Map<Format<TextMap>, Extractor<TextMap>> formatToExtractor = new LinkedHashMap<>();
+  final ActiveSpanSource activeSpanSource;
 
   BraveTracer(Builder b) {
     brave4 = b.brave4.tracer();
@@ -118,13 +126,14 @@ public final class BraveTracer implements Tracer {
       formatToInjector.put(entry.getKey(), entry.getValue().injector(TextMap::put));
       formatToExtractor.put(entry.getKey(), new TextMapExtractorAdaptor(entry.getValue()));
     }
+    activeSpanSource = b.activeSpanSource;
   }
 
   /**
    * {@inheritDoc}
    */
   @Override public SpanBuilder buildSpan(String operationName) {
-    return new BraveSpanBuilder(brave4, operationName);
+    return new BraveSpanBuilder(this, brave4, operationName);
   }
 
   /**
@@ -140,18 +149,13 @@ public final class BraveTracer implements Tracer {
   }
 
   @Override public ActiveSpan activeSpan() {
-    brave.Span currentSpan = brave4.currentSpan();
-    return (currentSpan != null) ? new BraveActiveSpan(currentSpan) : null;
+    return activeSpanSource.activeSpan();
   }
 
   @Override public ActiveSpan makeActive(Span span) {
-    return makeActive(brave4, BraveSpan.class.cast(span));
-  }
-
-  static ActiveSpan makeActive(brave.Tracer tracer, BraveSpan span) {
-    brave.Span unwrapped = span.unwrap();
-    tracer.withSpanInScope(unwrapped);
-    return new BraveActiveSpan(unwrapped);
+    brave.Span unwrapped = ((BraveSpan)span).unwrap();
+    brave4.withSpanInScope(unwrapped);
+    return activeSpanSource.makeActive(span);
   }
 
   /**
