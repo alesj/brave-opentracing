@@ -13,16 +13,6 @@
  */
 package brave.opentracing;
 
-import brave.Tracing;
-import brave.propagation.Propagation;
-import brave.propagation.TraceContext;
-import brave.propagation.TraceContext.Extractor;
-import brave.propagation.TraceContext.Injector;
-import brave.propagation.TraceContextOrSamplingFlags;
-import io.opentracing.SpanContext;
-import io.opentracing.Tracer;
-import io.opentracing.propagation.Format;
-import io.opentracing.propagation.TextMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -30,6 +20,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
+import brave.Tracing;
+import brave.propagation.Propagation;
+import brave.propagation.TraceContext;
+import brave.propagation.TraceContext.Extractor;
+import brave.propagation.TraceContext.Injector;
+import brave.propagation.TraceContextOrSamplingFlags;
+import io.opentracing.ActiveSpan;
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.propagation.TextMap;
 
 /**
  * Using a tracer, you can create a spans, inject span contexts into a transport, and extract span
@@ -134,6 +137,21 @@ public final class BraveTracer implements Tracer {
     }
     TraceContext traceContext = ((BraveSpanContext) spanContext).unwrap();
     injector.inject(traceContext, (TextMap) carrier);
+  }
+
+  @Override public ActiveSpan activeSpan() {
+    brave.Span currentSpan = brave4.currentSpan();
+    return (currentSpan != null) ? new BraveActiveSpan(currentSpan) : null;
+  }
+
+  @Override public ActiveSpan makeActive(Span span) {
+    return makeActive(brave4, BraveSpan.class.cast(span));
+  }
+
+  static ActiveSpan makeActive(brave.Tracer tracer, BraveSpan span) {
+    brave.Span unwrapped = span.unwrap();
+    tracer.withSpanInScope(unwrapped);
+    return new BraveActiveSpan(unwrapped);
   }
 
   /**
