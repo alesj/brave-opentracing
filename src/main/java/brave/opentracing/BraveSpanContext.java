@@ -50,6 +50,6 @@ public final class BraveSpanContext implements SpanContext {
    */
   @Override public Iterable<Map.Entry<String, String>> baggageItems() {
     // brave doesn't support baggage
-    return Collections.EMPTY_SET;
+    return Collections.emptySet();
   }
 }

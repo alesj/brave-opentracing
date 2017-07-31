@@ -15,6 +15,8 @@ package brave.opentracing;
 
 import brave.propagation.SamplingFlags;
 import brave.propagation.TraceContext;
+import io.opentracing.ActiveSpan;
+import io.opentracing.BaseSpan;
 import io.opentracing.References;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
@@ -42,6 +44,7 @@ public final class BraveSpanBuilder implements Tracer.SpanBuilder {
   private String operationName;
   private long timestamp;
   private TraceContext parent;
+  private boolean ignoringActiveSpan;
 
   BraveSpanBuilder(brave.Tracer braveTracer, String operationName) {
     this.braveTracer = braveTracer;
@@ -58,7 +61,7 @@ public final class BraveSpanBuilder implements Tracer.SpanBuilder {
   /**
    * {@inheritDoc}
    */
-  @Override public Tracer.SpanBuilder asChildOf(Span parent) {
+  @Override public Tracer.SpanBuilder asChildOf(BaseSpan parent) {
     return asChildOf(parent.context());
   }
 
@@ -105,14 +108,21 @@ public final class BraveSpanBuilder implements Tracer.SpanBuilder {
     return this;
   }
 
+  @Override
+  public Span start() {
+    return startManual();
+  }
+
   /**
    * {@inheritDoc}
    */
-  @Override public BraveSpan start() {
+  @Override public BraveSpan startManual() {
     boolean server = Tags.SPAN_KIND_SERVER.equals(tags.get(Tags.SPAN_KIND.getKey()));
 
+    TraceContext parentContext = (!ignoringActiveSpan ? parent : null);
+
     brave.Span span;
-    if (parent == null) {
+    if (parentContext == null) {
       // adjust sampling decision, this reflects Zipkin's "before the fact" sampling policy
       // https://github.com/openzipkin/brave/tree/master/brave#sampling
       SamplingFlags samplingFlags = SamplingFlags.EMPTY;
@@ -134,9 +144,9 @@ public final class BraveSpanBuilder implements Tracer.SpanBuilder {
       // Zipkin's default is to share a span ID between the client and the server in an RPC.
       // When we start a server span with a parent, we assume the "parent" is actually the
       // client on the other side of the RPC. Accordingly, we join that span instead of fork.
-      span = braveTracer.joinSpan(parent);
+      span = braveTracer.joinSpan(parentContext);
     } else {
-      span = braveTracer.newChild(parent);
+      span = braveTracer.newChild(parentContext);
     }
 
     if (operationName != null) span.name(operationName);
@@ -159,14 +169,26 @@ public final class BraveSpanBuilder implements Tracer.SpanBuilder {
     return BraveSpan.wrap(result);
   }
 
+  @Override
+  public ActiveSpan startActive() {
+    BraveSpan braveSpan = startManual();
+    return BraveTracer.makeActive(braveTracer, braveSpan);
+  }
+
+  @Override
+  public Tracer.SpanBuilder ignoreActiveSpan() {
+    ignoringActiveSpan = true;
+    return this;
+  }
+
   /**
    * Returns zero values as neither <a href="https://github.com/openzipkin/b3-propagation">B3</a>
    * nor Brave include baggage support.
    */
   // OpenTracing could one day define a way to plug-in arbitrary baggage handling similar to how
   // it has feature-specific apis like active-span
-  @Override public Iterable<Map.Entry<String, String>> baggageItems() {
+  public Iterable<Map.Entry<String, String>> baggageItems() {
     // brave doesn't support baggage
-    return Collections.EMPTY_SET;
+    return Collections.emptySet();
   }
 }
